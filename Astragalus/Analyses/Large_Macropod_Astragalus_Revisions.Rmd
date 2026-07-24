@@ -19,7 +19,7 @@ library(nlme)
 library(doParallel)
 #library(landvR)
 
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Sorting-the-Mob/Astragalus")
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus")
 ````
 
 ##Import training data
@@ -37,7 +37,7 @@ filelist_species <- rownames(speclist.train)
 
 #Create array of landmark coordinate data
 coords <- NULL  
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Sorting-the-Mob/Astragalus/Data/Coordinates")
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus/Data/Coordinates")
 for (i in 1:length(filelist.train)){
   temp  <- read.morphologika(filelist.train[i]) 
   k <- dim(temp)[1] 
@@ -45,7 +45,7 @@ for (i in 1:length(filelist.train)){
 Data.train <- arrayspecs(coords, k, 3) 
 dimnames(Data.train)[[3]] <- filelist_species
 
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Sorting-the-Mob/Astragalus")
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus")
 remove(i, filelist.train, k, coords, temp, filelist_species) 
 ````
 

@@ -24,7 +24,7 @@ library(doParallel)
 #library(landvR)
 
 
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Sorting-the-Mob/Calcaneus")
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Calcaneus")
 ```
 
 ##Import Data
@@ -41,7 +41,7 @@ filelist_species <- rownames(speclist.train)
 
 #Create array of landmark coordinate data
 coords <- NULL
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Sorting-the-Mob/Calcaneus/Data/Coordinates")
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Calcaneus/Data/Coordinates")
 for (i in 1:length(filelist.train)){
   temp  <- read.morphologika(filelist.train[i]) 
   k <- dim(temp)[1] 
@@ -49,7 +49,7 @@ for (i in 1:length(filelist.train)){
 Data.train <- arrayspecs(coords, k, 3) 
 dimnames(Data.train)[[3]] <- c(paste(substr(speclist.train$Genus,1,1),substr(speclist.train$Species,1,3), speclist.train$Specimen_ID ,sep = "_"))
 
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Sorting-the-Mob/Calcaneus")
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Calcaneus")
 remove(i, k, coords, temp, filelist.train, filelist_species) 
 ```
 
