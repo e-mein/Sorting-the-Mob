@@ -1,0 +1,892 @@
+---
+title: "MacropodAstragalus"
+author: "Erin Mein"
+date: "29/04/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+````{r Load required packages & set working directory}
+library(geomorph)
+library(rgl)
+library(Morpho)
+library(plyr)
+library(tidyverse)
+library(pca3d)
+library(caret)
+library(nlme)
+library(doParallel)
+library(landvR)
+
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus")
+````
+
+##Import training data
+
+````{r read in file list of coordinates, create object of list of coordinate files}
+#open specifier file
+speclist.train <- read.csv("Data/Specifier.csv")
+rownames(speclist.train) <- c(paste(substr(speclist.train$Genus,1,1),substr(speclist.train$Species,1,3), speclist.train$Specimen_ID ,sep = "_"))
+
+#Create vector of coordinate files
+filelist.train <-list.files(path = "Data/Coordinates", pattern = ".txt")
+
+#Create vector of abbreviated specimen names
+filelist_species <- rownames(speclist.train)
+
+#Create array of landmark coordinate data
+coords <- NULL  
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus/Data/Coordinates")
+for (i in 1:length(filelist.train)){
+  temp  <- read.morphologika(filelist.train[i]) 
+  k <- dim(temp)[1] 
+  coords <- rbind(coords, two.d.array(temp))}
+Data.train <- arrayspecs(coords, k, 3) 
+dimnames(Data.train)[[3]] <- filelist_species
+
+setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus")
+remove(i, filelist.train, k, coords, temp, filelist_species) 
+````
+
+````{r Clean data}
+Data.train <- Data.train[-c(10,18),,] #remove undesired landmarks
+````
+
+````{r Set sliding semilandmarks}
+#with landmarks removed
+slide <- c(28:35,38:45, 48:52)
+before <- slide - 1
+after <- slide + 1
+curves <- cbind(before, slide, after)
+remove(before, slide, after)
+````
+
+##Checks & Balances
+```{r Read a mesh file in as a standard file to view against}
+# Oruf <- read.ply("Data/O_ruf_SAM-M27398.ply")
+# Oruf$material$color <- Oruf$it
+# Oruf$material$color <- "hotpink"
+# rgl.close()
+# shade3d(Oruf)
+```
+
+```{r check what order ply specimen in is data array}
+#dimnames(Data.train)[[3]] 
+```
+
+```{r Double check that the 3D info is entered properly by checking landmark numbers against ply}
+# plot3d(Data.train[,,71], asp=FALSE, size =5, col="green") #Data.train[,,x] where x is order of ply in array
+# text3d(Data.train[,,71], texts=c(1:dim (Data.train[,,71])[[1]])) #Data.train[,,x] where x is order of ply in array
+# shade3d(Oruf, alpha=0.7)
+```
+
+````{r check order of array}
+#This must return "TRUE" for all. 
+dimnames(Data.train)[[3]]==rownames(speclist.train)
+````
+
+##Generalised Procrustes Analysis
+
+````{r Generalised Procrustes Analysis----}
+#Remove effects of size, rotation and translation from landmark coordinates
+GPA <- gpagen(Data.train, curves = curves)
+#combine transformed coordinates and specifier list}
+GPA <- geomorph.data.frame(GPA, genus = speclist.train$Genus, species = speclist.train$Species, ID = speclist.train$Specimen_ID, age = speclist.train$Age, habitat = speclist.train$Habitat, complexity = speclist.train$Complexity)
+````
+
+##Symbology
+````{r Symbology }
+Macropus <- "#E06120"
+Osphranter <- "#53f395"
+Notamacropus <- "#003eff"
+Wallabia <- "#F9438F"
+
+agilis <- "#003eff"
+antilopinus <- "#1f986c"
+bernardus <- "#93dd4b"
+bicolor <- "#F9438F"
+fuliginosus <- "#E29900"
+giganteus <- "#E06120"
+parryi <- "#191e86"
+robustus <- "#53f395"
+rufogriseus <- "#47e0ff"
+rufus <- "#37671d"
+
+age <- speclist.train$Age
+age <- (gsub("Juvenile", 8, age))
+age <- (gsub("Subadult", 17, age))
+age <- (gsub("Adult", 16, age))
+age <- ifelse(is.na(age), 7, age)
+age <- as.numeric(age)
+age
+
+sex <- speclist.train$Sex
+sex <- (gsub("Female", 17, sex))
+sex <- (gsub("Male", 15, sex))
+sex <- ifelse(is.na(sex), 16, sex)
+sex <- as.numeric(sex)
+sex
+````
+
+##Size
+````{r Boxplot}
+Csize <- cbind(speclist.train[,1:7], GPA$Csize)
+colnames(Csize)[8] <- "Csize"
+
+col <- c(agilis, antilopinus, bernardus, bicolor, fuliginosus, giganteus, parryi, robustus, rufogriseus, rufus)
+ggplot(Csize, aes(x = reorder(Species, Csize), y = Csize, fill = Species, group = Species)) +
+  geom_boxplot(varwidth = TRUE) +
+  scale_fill_manual(values=col) +
+  ggbeeswarm::geom_quasirandom(alpha = 0.5, size = 2) +
+  theme_minimal(base_size = 12)+
+  labs(title = "Astragalus Size", x = "Species", y = "Centroid Size")+
+  theme(legend.position = "none")
+
+remove(Csize, col)
+````
+
+##Principal Components Analysis
+````{r Plot PC1 and PC2}
+PCA <- gm.prcomp(GPA$coords)
+s_PCA <- summary(PCA)
+
+chull <- cbind(speclist.train[,1:3], PCA$x[,1:2])
+colnames(chull)[4:5] <- c("PC1", "PC2")
+polys <- ddply(chull, .(Species), function(chull) chull[chull(chull$PC1, chull$PC2), ])
+
+palette <- c(agilis, antilopinus, bernardus ,bicolor ,fuliginosus ,giganteus ,parryi, robustus, rufogriseus, rufus)
+palette <- palette[as.factor(speclist.train$Species)]
+
+plot(PCA$x[,2] ~ PCA$x[,1], 
+     pch=age,
+     col=palette,
+     xlab= paste("PC 1 (", round(s_PCA$PC.summary$Comp1[3]*100, 1), "%)", sep = ""), 
+     ylab= paste("PC 2 (", round(s_PCA$PC.summary$Comp2[2]*100, 1), "%)", sep = ""), 
+     main= paste("PCA of Macropod Astragalus Shape (",round(s_PCA$PC.summary$Comp2[3]*100), "% variation)"),
+     asp=1, 
+     cex=2.2)
+
+polygon(c(polys$PC1[polys$Species=="agilis"]), c(polys$PC2[polys$Species=="agilis"]), col = alpha(agilis, 0.2), border = agilis)
+polygon(c(polys$PC1[polys$Species=="antilopinus"]), c(polys$PC2[polys$Species=="antilopinus"]), col = alpha(antilopinus, 0.2), border = antilopinus)
+polygon(c(polys$PC1[polys$Species=="bernardus"]), c(polys$PC2[polys$Species=="bernardus"]), col = alpha(bernardus, 0.2), border = bernardus)
+polygon(c(polys$PC1[polys$Species=="bicolor"]), c(polys$PC2[polys$Species=="bicolor"]), col = alpha(bicolor, 0.2), border = bicolor)
+polygon(c(polys$PC1[polys$Species=="fuliginosus"]), c(polys$PC2[polys$Species=="fuliginosus"]), col = alpha(fuliginosus, 0.2), border = fuliginosus)
+polygon(c(polys$PC1[polys$Species=="giganteus"]), c(polys$PC2[polys$Species=="giganteus"]), col = alpha(giganteus, 0.2), border = giganteus)
+polygon(c(polys$PC1[polys$Species=="robustus"]), c(polys$PC2[polys$Species=="robustus"]), col = alpha(robustus, 0.2), border = robustus)
+polygon(c(polys$PC1[polys$Species=="rufogriseus"]), c(polys$PC2[polys$Species=="rufogriseus"]), col = alpha(rufogriseus, 0.2), border = rufogriseus)
+polygon(c(polys$PC1[polys$Species=="rufus"]), c(polys$PC2[polys$Species=="rufus"]), col = alpha(rufus, 0.2), border = rufus)
+
+abline(v=0, lty=2, col="grey50")
+abline(h=0, lty=2, col="grey50")
+remove(chull, polys)
+```
+
+```{r Plot PCA in 3D}
+plot3d(PCA$x[,1], PCA$x[,2], PCA$x[,3],
+       xlab = "PC1",
+       ylab = "PC2",
+       zlab = "PC3",
+       type = "s",
+       col = palette,
+       size = 1.7,
+       aspect = FALSE)
+````
+
+##Between Group PCA
+````{r between group PCAs}
+groups <- GPA$genus
+bgPCA <- groupPCA(GPA$coords[,,], groups = groups, cv = T)
+
+palette <- c(agilis, antilopinus, bernardus, bicolor, fuliginosus, giganteus, parryi, robustus, rufogriseus, rufus)
+palette <- palette[as.factor(speclist.train$Species[])]
+
+plot(bgPCA$Scores[,2] ~ bgPCA$Scores[,1], 
+     pch=age,
+     col= palette,
+     xlab= paste("PC 1 (", round(bgPCA$Variance$exVar[1]*100, 1), "%)", sep = ""),
+     ylab= paste("PC 2 (", round(bgPCA$Variance$exVar[2]*100, 1), "%)", sep = ""), 
+     asp=1, 
+     cex=2.5,
+     main = paste("bg-PCA of Macropod Astragalus grouped by Genus (",round(bgPCA$Variance$cumVar[2]*100), "% variation)"))
+
+chull <- cbind(speclist.train[,], bgPCA$Scores[,1:2])
+colnames(chull)[10:11] <- c("PC1", "PC2")
+polys <- ddply(chull, .(Species), function(chull) chull[chull(chull$PC1, chull$PC2), ])
+
+polygon(c(polys$PC1[polys$Species=="agilis"]), c(polys$PC2[polys$Species=="agilis"]), col = alpha(agilis, 0.2), border = agilis)
+polygon(c(polys$PC1[polys$Species=="antilopinus"]), c(polys$PC2[polys$Species=="antilopinus"]), col = alpha(antilopinus, 0.2), border = antilopinus)
+polygon(c(polys$PC1[polys$Species=="bernardus"]), c(polys$PC2[polys$Species=="bernardus"]), col = alpha(bernardus, 0.2), border = bernardus)
+polygon(c(polys$PC1[polys$Species=="bicolor"]), c(polys$PC2[polys$Species=="bicolor"]), col = alpha(bicolor, 0.2), border = bicolor)
+polygon(c(polys$PC1[polys$Species=="fuliginosus"]), c(polys$PC2[polys$Species=="fuliginosus"]), col = alpha(fuliginosus, 0.2), border = fuliginosus)
+polygon(c(polys$PC1[polys$Species=="giganteus"]), c(polys$PC2[polys$Species=="giganteus"]), col = alpha(giganteus, 0.2), border = giganteus)
+polygon(c(polys$PC1[polys$Species=="robustus"]), c(polys$PC2[polys$Species=="robustus"]), col = alpha(robustus, 0.2), border = robustus)
+polygon(c(polys$PC1[polys$Species=="rufogriseus"]), c(polys$PC2[polys$Species=="rufogriseus"]), col = alpha(rufogriseus, 0.2), border = rufogriseus)
+polygon(c(polys$PC1[polys$Species=="rufus"]), c(polys$PC2[polys$Species=="rufus"]), col = alpha(rufus, 0.2), border = rufus)
+
+
+abline(v=0, lty=2, col="grey50")
+abline(h=0, lty=2, col="grey50")
+
+remove(chull, polys)
+````
+
+```{r Plot3d bg-PCA}
+plot3d(bgPCA$Scores[,1], bgPCA$Scores[,2], bgPCA$Scores[,3],
+       xlab = "PC1",
+       ylab = "PC2",
+       zlab = "PC3",
+       col = palette,
+       size = 1.7,
+       aspect = FALSE,
+       type = "s")
+```
+
+
+##Allometry
+```{r Allometry}
+#Regress Shape ~ Csize + genus
+AllomGenus1 <- procD.lm(GPA$coords[,,-c(30,79:81)] ~ GPA$Csize[-c(30,79:81)] + GPA$genus[-c(30,79:81)], logsz = TRUE, iter = 999, turbo = TRUE, RRPP = TRUE, print.progress = FALSE) #remove Wallabia c(79:81), remove N. agilis outlier #30
+summary(AllomGenus1)
+
+#Plot allometry
+palette <- c(agilis, antilopinus, bernardus, fuliginosus, giganteus, parryi, robustus, rufogriseus, rufus)
+palette <- palette[as.factor(GPA$species[-c(30,79:81)])]
+
+tmp <- plotAllometry(AllomGenus1, GPA$Csize[-c(30,79:81)], 
+              logsz=TRUE, 
+              method = "RegScore", 
+              col = palette, 
+              pch= age[-c(30,79:81)], 
+              cex= 2,
+              main = "Astragalus Intergenera Allometry")
+lmData <- data.frame(cbind(tmp$plot.args$y, tmp$plot.args$x))
+lmData$Genus <- GPA$genus[-c(30,79:81)]
+colnames(lmData) <- c("RegScore", "Predictor", "Genus")
+slopes <- coef(lmList(RegScore ~ Predictor|Genus, data = lmData))
+remove(lmData)
+abline(slopes[1,1], slopes[1,2], col = Macropus)
+abline(slopes[2,1], slopes[2,2], col = Notamacropus)
+abline(slopes[3,1], slopes[3,2], col = Osphranter)
+remove(slopes, tmp)
+```
+
+```{r unique allometries}
+#Regress Shape ~ Csize * genus
+AllomGenus2 <- procD.lm(GPA$coords[,,-c(30,79:81)] ~ GPA$Csize[-c(30,79:81)] * GPA$genus[-c(30,79:81)],logsz = TRUE, iter = 999, turbo = TRUE, RRPP = TRUE, print.progress = FALSE)
+summary(AllomGenus2) 
+
+#Plot allometry
+tmp <- plotAllometry(AllomGenus2, GPA$Csize[-c(30,79:81)], 
+              logsz=TRUE, 
+              method = "RegScore", 
+              col = palette, 
+              pch= age[-c(30,79:81)], 
+              cex= 2,
+              main = "Astragalus Intergenera Allometry w. Interaction")
+lmData <- data.frame(cbind(tmp$plot.args$y, tmp$plot.args$x))
+lmData$Genus <- GPA$genus[-c(30,79:81)]
+colnames(lmData) <- c("RegScore", "Predictor", "Genus")
+slopes <- coef(lmList(RegScore ~ Predictor|Genus, data = lmData))
+remove(lmData)
+abline(slopes[1,1], slopes[1,2], col = Macropus)
+abline(slopes[2,1], slopes[2,2], col = Notamacropus)
+abline(slopes[3,1], slopes[3,2], col = Osphranter)
+remove(slopes, tmp)
+
+#Pairwise Test of Slope Differences
+slopepairwise <- pairwise(AllomGenus2, fit.null = AllomGenus1, groups = GPA$genus[-c(30,79:81)], covariate = log(GPA$Csize[-c(30,79:81)])) 
+summary(slopepairwise, type.test = "VC", confidence = 0.95, stat.table = TRUE)
+```
+
+##Visualising Taxonomic Shape Differences
+```{r Calculating average shape}
+#calculate GPA coordinates for average shape across dataset
+MeanCoords <- mshape(GPA$coords)
+
+#find closest specimen to the mean shape & read ply
+findMeanSpec(GPA$coords) 
+MeanMesh <- read.ply("Data/O_ruf_SAM-M27398.ply") 
+
+#save average specimen coordinates
+mean_spec_coord <- Data.train[,,which(dimnames(Data.train)[[3]]=="O_ruf_SAM-M27398")]
+
+#Warp a reference mesh for visualisations
+WarpedRefMesh <- warpRefMesh(mesh = MeanMesh, mesh.coord= mean_spec_coord,  ref= MeanCoords, color = "light grey")
+remove(MeanMesh)
+```
+
+```{r Predict Shape at Mean Locations in bgPCA plot}
+#Predict mean genus shape in bgPCA
+tmp <- bgPCA$Scores[,1:3] 
+preds <- shape.predictor(GPA$coords[,,], x= tmp, Intercept = FALSE, 
+                         Macropus = c(mean(tmp[1:17, 1]), mean(tmp[1:17,2]), mean(tmp[1:17,3])), #1
+                         Notamacropus = c(mean(tmp[18:34, 1]), mean(tmp[18:34,2]), mean(tmp[18:34,3])), #2
+                         Osphranter = c(mean(tmp[c(35:78), 1]), mean(tmp[c(35:78),2]), mean(tmp[c(35:78),3])), #3
+                         Wallabia = c(mean(tmp[79:81, 1]), mean(tmp[79:81,2]), mean(tmp[79:81,3]))) #4
+#Warp reference meshes
+meshlist <- list()
+for (i in 1: length(preds)) {
+  tempmesh <- plotRefToTarget(MeanCoords, 
+                              preds[[i]], 
+                              mesh = WarpedRefMesh, 
+                              method="surface")
+  meshlist[[i]] <- tempmesh
+}
+remove(tmp, i, tempmesh)
+```
+
+```{r Create warpmovie}
+#Save image stacks to create warp movie of shape change between genera from different aspects
+# #Macropus vs Notamacropus taxa
+ warpmovie3d(meshlist[[1]], meshlist[[2]], n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/InteriorbgPCA", movie = "1_Macr_Notam")
+# 
+# #Notamacropus vs Osphranter taxa
+# warpmovie3d(meshlist[[2]], meshlist[[3]], n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/InteriorbgPCA", movie = "2_Notam_Osph")
+# 
+# #Osphranter vs Macropus 
+ warpmovie3d(meshlist[[3]], meshlist[[1]], n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/Lateral2bgPCA", movie = "3_Osph_Macr")
+# 
+# #Macropus vs Wallabia
+# warpmovie3d(meshlist[[1]], meshlist[[4]], n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/InteriorbgPCA", movie = "4_Macr_Wall")
+# 
+# #Wallabia vs Notamacropus
+# warpmovie3d(meshlist[[4]], meshlist[[2]], n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/InteriorbgPCA", movie = "5_Wall_Notam")
+```
+
+```{r visualising shape differences - Macropus to Notamacropus}
+differences <- coordinates.difference(coordinates = preds$Macropus,
+                                      reference = preds$Notamacropus, type = "spherical")
+procrustes.var.plot(preds$Macropus, preds$Notamacropus, col = heat.colors, col.val = differences[[1]][1:53], magnitude = 1, pt.size = 1) # 53 = n lmks
+shade3d(meshlist[[2]], alpha = 0.6) #meshlist[2] = Notamacropus 
+```
+
+```{r visualising shape differences - Notamacropus to Osphranter}
+differences <- coordinates.difference(coordinates = preds$Notamacropus,
+                                      reference = preds$Osphranter, type = "spherical")
+procrustes.var.plot(preds$Osphranter, preds$Notamacropus, col = heat.colors, col.val = differences[[1]][1:53], magnitude = 1, pt.size = 1) # 53 = n lmks
+shade3d(meshlist[[2]], alpha = 0.9) #meshlist[2] = Notamacropus
+```
+
+```{r visualising shape differences - Osphranter to Macropus}
+differences <- coordinates.difference(coordinates = preds$Osphranter,
+                                      reference = preds$Macropus, type = "spherical")
+procrustes.var.plot(preds$Macropus, preds$Osphranter, col = heat.colors, col.val = differences[[1]][1:53], magnitude = 1, pt.size = 1) # 53 = n lmks
+shade3d(meshlist[[3]], alpha = 0.6) #meshlist[3] =  Osphranter
+```
+
+```{r visualising shape differences - Notamacropus to Wallabia}
+differences <- coordinates.difference(coordinates = preds$Notamacropus,
+                                      reference = preds$Wallabia, type = "spherical")
+procrustes.var.plot(preds$Notamacropus, preds$Wallabia, col = heat.colors, col.val = differences[[1]][1:53], magnitude = 1, pt.size = 1) # 53 = n lmks
+shade3d(meshlist[[4]], alpha = 0.6) #meshlist[2] = Notamacropus
+```
+
+
+##Visualising Allometry
+```{r Osphranter}
+#regress Osphranter Shape ~ Csize 
+OsphAllom <- procD.lm(GPA$coords[,,c(35:63)] ~ GPA$Csize[35:63], logsz = TRUE, iter = 999, turbo = TRUE, RRPP = TRUE, print.progress = FALSE) 
+summary(OsphAllom)
+
+#Plot Allometric Regression
+palette <- c(antilopinus, bernardus, robustus)
+palette <- palette[as.factor(GPA$species[c(35:63)])]
+OsphAllom.Plot <- plotAllometry(OsphAllom, GPA$Csize[35:63], 
+              logsz=TRUE, 
+              method = "PredLine", 
+              col = palette, 
+              pch= age[35:63], 
+              cex= 2,
+              main = "Astragalus Osphranter Allometry")
+
+#Predict Min & Max Shapes along fitted allometric slope
+OsphPreds <- shape.predictor(OsphAllom$GM$fitted, 
+                             x= OsphAllom.Plot$PredLine, 
+                             Intercept = FALSE, 
+                             predmin = min(OsphAllom.Plot$PredLine), 
+                             predmax = max(OsphAllom.Plot$PredLine))
+
+#Warp Reference Mesh to Min & Max Shapes along fitted allometric slope
+SmallOsph <- plotRefToTarget(mshape(GPA$coords), 
+                OsphPreds$predmax,
+                method = "surface",
+                mesh = WarpedRefMesh)
+
+LargeOsph <- plotRefToTarget(mshape(GPA$coords), 
+                OsphPreds$predmin,
+                method = "surface",
+                mesh = WarpedRefMesh)
+
+#Visualize heat mapped vector displacement between corresponding landmarks
+differences <- coordinates.difference(coordinates = OsphPreds$predmax,
+                                      reference = OsphPreds$predmin, type = "spherical")
+procrustes.var.plot(OsphPreds$predmin, OsphPreds$predmax, col = heat.colors, col.val = differences[[1]][1:53], magnitude = 1, pt.size = 1) # 53 = n lmks
+shade3d(SmallOsph, alpha = 0.6)
+
+#Save image stack to make warp movie of allometric shape change from different aspects
+# warpmovie3d(SmallOsph, LargeOsph, n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/Allometry", movie = "OsphranterAllometryPlantar")
+```
+
+```{r Macropus}
+#regress Macropus Shape ~ Csize
+MacpAllom <- procD.lm(GPA$coords[,,c(1:17)] ~ GPA$Csize[c(1:17)], logsz = TRUE, iter = 999, turbo = TRUE, RRPP = TRUE, print.progress = FALSE) 
+summary(MacpAllom)
+
+#Plot Allometric Regression
+palette <- c(fuliginosus, giganteus)
+palette <- palette[as.factor(GPA$species[c(1:17)])]
+MacpAllom.Plot <- plotAllometry(MacpAllom, GPA$Csize[1:17], 
+              logsz=TRUE, 
+              method = "PredLine", 
+              col = palette, 
+              pch= age[1:17], 
+              cex= 2,
+              main = "Astragalus Intergenera Allometry")
+
+
+#Predict Min & Max Shapes along fitted allometric slope
+MacpPreds <- shape.predictor(MacpAllom$GM$fitted, 
+                             x= MacpAllom.Plot$PredLine, 
+                             Intercept = FALSE, 
+                             predmin = min(MacpAllom.Plot$PredLine), 
+                             predmax = max(MacpAllom.Plot$PredLine))
+
+#Warp Reference Mesh to Min & Max Shapes along fitted allometric slope
+SmallMacp <- plotRefToTarget(mshape(GPA$coords), 
+                MacpPreds$predmin,
+                method = "surface",
+                mesh = WarpedRefMesh)
+
+LargeMacp <- plotRefToTarget(mshape(GPA$coords), 
+                MacpPreds$predmax,
+                method = "surface",
+                mesh = WarpedRefMesh)
+
+#Visualize heat mapped vector displacement between corresponding landmarks
+differences <- coordinates.difference(coordinates = MacpPreds$predmax,
+                                      reference = MacpPreds$predmin, type = "spherical")
+procrustes.var.plot(MacpPreds$predmax, MacpPreds$predmin, col = heat.colors, col.val = differences[[1]][1:53], magnitude = 1, pt.size = 1) # 53 = n lmks
+shade3d(SmallMacp, alpha = 0.6)
+
+#Save image stack to make warp movie of allometric shape change from different aspects
+# warpmovie3d(SmallMacp, LargeMacp, n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/Allometry", movie = "MacropusAllometryPlantar")
+```
+
+```{r Notamacropus}
+#regress Notamacropus Shape ~ Csize
+NmacAllom <- procD.lm(GPA$coords[,,c(18:29,31:34)] ~ GPA$Csize[c(18:29,31:34)] , logsz = TRUE, iter = 999, turbo = TRUE, RRPP = TRUE, print.progress = FALSE) 
+summary(NmacAllom)
+
+#Plot Allometric Regression
+palette <- c(agilis, parryi, rufogriseus)
+palette <- palette[as.factor(GPA$species[c(18:29,31:34)])]
+NmacAllom.Plot <- plotAllometry(NmacAllom, GPA$Csize[c(18:29,31:34)], 
+              logsz=TRUE, 
+              method = "PredLine", 
+              col = palette, 
+              pch= age[c(18:29,31:34)], 
+              cex= 2,
+              main = "Astragalus Intergenera Allometry")
+
+#Predict Min & Max Shapes along fitted allometric slope
+NmacPreds <- shape.predictor(NmacAllom$GM$fitted, 
+                             x= NmacAllom.Plot$PredLine, 
+                             Intercept = FALSE, 
+                             predmin = min(NmacAllom.Plot$PredLine), 
+                             predmax = max(NmacAllom.Plot$PredLine))
+
+#Warp Reference Mesh to Min & Max Shapes along fitted allometric slope
+SmallNmac <- plotRefToTarget(mshape(GPA$coords), 
+                NmacPreds$predmax,
+                method = "surface",
+                mesh = WarpedRefMesh)
+
+LargeNmac <- plotRefToTarget(mshape(GPA$coords), 
+                NmacPreds$predmin,
+                method = "surface",
+                mesh = WarpedRefMesh)
+
+#Visualize heat mapped vector displacement between corresponding landmarks
+differences <- coordinates.difference(coordinates = NmacPreds$predmax,
+                                      reference = NmacPreds$predmin, type = "spherical")
+procrustes.var.plot(NmacPreds$predmin, NmacPreds$predmax, col = heat.colors, col.val = differences[[1]][1:53], magnitude = 1, pt.size = 1) # 53 = n lmks
+shade3d(SmallNmac, alpha = 0.6)
+
+#Save image stack to make warp movie of allometric shape change from different aspects
+# warpmovie3d(SmallNmac, LargeNmac, n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/Allometry", movie = "NotmacAllometryPlantar")
+```
+
+```{r Wallabia}
+#Regress Wallabia Shape ~ Csize
+WallAllom <- procD.lm(GPA$coords[,,c(79:81)] ~ GPA$Csize[c(79:81)] , logsz = TRUE, iter = 999, turbo = TRUE, RRPP = TRUE, print.progress = FALSE) 
+summary(WallAllom)
+
+#Plot Allometric Regression
+WallAllom.Plot <- plotAllometry(WallAllom, GPA$Csize[c(79:81)], 
+              logsz=TRUE, 
+              method = "PredLine", 
+              col = bicolor, 
+              pch= age[c(79:81)], 
+              cex= 2,
+              main = "Astragalus Intergenera Allometry")
+
+#Predict Min & Max Shapes along fitted allometric slope
+WallPreds <- shape.predictor(WallAllom$GM$fitted, 
+                             x= WallAllom.Plot$PredLine, 
+                             Intercept = FALSE, 
+                             predmin = min(WallAllom.Plot$PredLine), 
+                             predmax = max(WallAllom.Plot$PredLine))
+
+#Warp Reference Mesh to Min & Max Shapes along fitted allometric slope
+SmallWall <- plotRefToTarget(mshape(GPA$coords), 
+                WallPreds$predmax,
+                method = "surface",
+                mesh = WarpedRefMesh)
+
+LargeWall <- plotRefToTarget(mshape(GPA$coords), 
+                WallPreds$predmin,
+                method = "surface",
+                mesh = WarpedRefMesh)
+
+#Visualize heat mapped vector displacement between corresponding landmarks
+differences <- coordinates.difference(coordinates = WallPreds$predmax,
+                                      reference = WallPreds$predmin, type = "spherical")
+procrustes.var.plot(WallPreds$predmin, WallPreds$predmax, col = heat.colors, col.val = differences[[1]][1:53], magnitude = 1, pt.size = 1) # 53 = n lmks
+shade3d(SmallWall, alpha = 0.6)
+
+#Save image stack to make warp movie of allometric shape change from different aspects
+#warpmovie3d(SmallWall, LargeWall, n = 15, palindrome = F, col = "lightgrey", folder = "Analyses/GIFs/Allometry", movie = "WallAllometryAnterior")
+```
+
+##Visualising Mean Genus Shapes
+```{r Mean Macropus}
+#Read in ply of specimen closest to mean Macropus shape
+findMeanSpec(GPA$coords[,,GPA$genus == "Macropus"]) #find specimen
+Macropus.Mean <- read.ply("Data/M_gig_QM-JM20891.ply") #read ply
+GPA$ID[15] #double check array position matches ply for mesh.coord
+
+#calculate mean Macropus shape
+Macropus.Mean.coord <- mshape(GPA$coords[,,GPA$genus == "Macropus"])
+
+#Warp mesh to mean shape
+Mean.Macropus.Warp <- warpRefMesh(mesh = Macropus.Mean, mesh.coord= GPA$coords[,,15],  ref= Macropus.Mean.coord, color = "light grey")
+
+#save mean mesh as ply
+#mesh2ply(Mean.Macropus.Warp, "MeanMacropus", col = "light grey")
+
+#clean environment
+remove(Macropus_Mean, Macropus_Mean_coord, Mean.Macropus.Warp)
+```
+
+```{r Mean Osphranter}
+#Read in ply of specimen closest to mean Osphranter shape
+findMeanSpec(GPA$coords[,,GPA$genus == "Osphranter"]) #find specimen
+Osphranter.Mean <- read.ply("Data/O_ruf_SAM-M27398.ply") #read ply
+GPA$ID[71] #double check array position matches ply for mesh.coord
+
+#calculate mean Osphranter shape
+Osphranter.Mean.coord <- mshape(GPA$coords[,,GPA$genus == "Osphranter"])
+
+#Warp mesh to mean shape
+Mean.Osphranter.Warp <- warpRefMesh(mesh = Osphranter.Mean, mesh.coord= GPA$coords[,,71],  ref= Osphranter.Mean.coord, color = "light grey")
+
+#save mean mesh as ply
+# mesh2ply(Mean.Osphranter.Warp, "MeanOsphranter", col = "light grey")
+
+#clean environment
+remove(Osphranter.Mean, Osphranter.Mean.coord, Mean.Osphranter.Warp)
+```
+
+```{r Mean Notamacropus}
+#Read in ply of specimen closest to mean Notamacropus shape
+findMeanSpec(GPA$coords[,,GPA$genus == "Notamacropus"]) #find specimen
+Notamacropus.Mean <- read.ply("Data/N_agi_MAGNT-U0237.ply") #read ply
+GPA$ID[20] #double check array position matches ply for mesh.coord
+
+#calculate mean Notamacropus shape
+Notamacropus.Mean.coord <- mshape(GPA$coords[,,GPA$genus == "Notamacropus"])
+
+#Warp mesh to mean shape
+Mean.Notamacropus.Warp <- warpRefMesh(mesh = Notamacropus.Mean, mesh.coord= GPA$coords[,,20],  ref= Notamacropus.Mean.coord, color = "light grey")
+
+#save mean mesh as ply
+# mesh2ply(Mean.Notamacropus.Warp, "MeanNotamacropus", col = "light grey")
+
+#clean environment
+remove(Notamacropus.Mean, Notamacropus.Mean.coord, Mean.Notamacropus.Warp)
+```
+
+```{r Mean Wallabia}
+#Read in ply of specimen closest to mean Wallabia shape
+findMeanSpec(GPA$coords[,,GPA$genus == "Wallabia"]) #find specimen
+Wallabia.Mean <- read.ply("Data/W_bic_UQ98.ply") #read ply
+GPA$ID[81] #double check array position matches ply for mesh.coord
+
+#calculate mean Wallabia shape
+Wallabia.Mean.coord <- mshape(GPA$coords[,,GPA$genus == "Wallabia"])
+
+#Warp mesh to mean shape
+Mean.Wallabia.Warp <- warpRefMesh(mesh = Wallabia.Mean, mesh.coord= GPA$coords[,,81],  ref= Wallabia.Mean.coord, color = "light grey")
+
+#save mean mesh as ply
+#mesh2ply(Mean.Wallabia.Warp, "MeanWallabia", col = "light grey")
+
+#clean environment
+remove(Wallabia.Mean, Mean.Wallabia.Warp, Wallabia.Mean.coord)
+```
+
+```{r Clean Environment}
+library(gdata)
+keep(Data.train, speclist.train, curves, sure = T)
+```
+
+##Classification
+
+```{r Create Dataframes of Predictors}
+#General Procrustes Superimposition to remove size, rotation & translation from landmark coordinates
+GPA <- gpagen(Data.train, curves = curves)
+GPA <- geomorph.data.frame(GPA, genus = speclist.train$Genus, species = speclist.train$Species, ID = speclist.train$Specimen_ID, age = speclist.train$Age)
+#Perform Principal Components Analysis
+PCA <- gm.prcomp(GPA$coords) 
+summary(PCA)
+
+#Create dataframe of predictors (PC scores) and observed genus as factor vector
+PCApredictors <- as.data.frame(cbind(PCA$x, GPA$genus))
+PCApredictors[,1:80] <- apply(PCApredictors[,1:80], 2, as.numeric) #1:x where x is number of PCs
+colnames(PCApredictors)[81] <- c("Genus")
+PCApredictors$Genus <- as.factor(PCApredictors$Genus)
+
+#Create empty matrix
+IterativePCA <- data.frame(matrix(nrow = 0, ncol = 3))
+colnames(IterativePCA) <- c("variable", "Accuracy", "Kappa")
+```
+
+```{r Linear Discriminant Analysis - Optimising No. Predictors}
+#run loop to save Accuracy & Kappa scores in stepwise addition of PCs as predictors 
+set.seed(42)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+for (i in 2:16) { #2:x where x is number of PCs in PCA, limited to 16 in LDA to ensure the number of predictors does not exceed the within-class sample size 
+ldaTune <- train(x = PCApredictors[,1:i],
+                    y = PCApredictors$Genus,
+                    method = "lda",
+                    metric = "Accuracy",
+                    prior = c(0.25, 0.25, 0.25, 0.25),
+                    trControl = trainControl(method = "LOOCV", number = 1000, classProbs = TRUE))
+
+IterativePCA <- rbind(IterativePCA, ldaTune$results[which.max(ldaTune$results$Accuracy),])} #Save Accuracy and Kappa scores in dataframe to assess optimal PCs
+stopCluster(cl)
+
+#plot Accuracy & Kappa scores to determine optimal number of PCs to include as predictors in model
+IterativePCA$PCs <- c(2:16)
+tmp <- IterativePCA[,c(1,3,4)]
+tmp$Group <- c("Kappa")
+knnPlot <- IterativePCA[,c(1,2,4)]
+knnPlot$Group <- c("Accuracy")
+colnames(knnPlot)[2] <- "Score"
+colnames(tmp)[2] <- "Score"
+knnPlot <- rbind(knnPlot, tmp)
+remove(tmp)
+
+ggplot(knnPlot, aes(x=PCs, y=Score, group = Group, color = Group)) + 
+  geom_line() +
+  geom_point()
+```
+
+```{r Linear Discriminant Analysis - Final Model}
+# adjust predictors to optimal number of PCs and rerun final model
+set.seed(42)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+ldaFIT <- train(x = PCApredictors[,1:7],
+                    y = PCApredictors$Genus,
+                    method = "lda",
+                    metric = "Accuracy",
+                    prior = c(0.25, 0.25, 0.25, 0.25),
+                    trControl = trainControl(method = "LOOCV", number = 1000, classProbs = TRUE))
+stopCluster(cl)
+
+#2) Summary of final model
+ldaFIT
+
+#2) Confusion matrix of final model
+confusionMatrix(ldaFIT$pred$pred, ldaFIT$pred$obs)
+
+#clear environment
+keep(Data.train, curves, speclist.train, sure = T)
+```
+
+```{r K Nearest Neighbour - Optimise No. Predictors}
+#run loop to save Accuracy & Kappa scores in stepwise addition of PCs as predictors 
+set.seed(42)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+
+for (i in 2:80) { #2:x where x is number of PCs in PCA
+  knnTune <- train(x = PCApredictors[,1:i], 
+                 y = PCApredictors$Genus,
+                 method = "knn",
+                 tuneGrid = data.frame(.k = c(2:20)), #initial tuning should be between 2:20
+                 trControl = trainControl(method = "LOOCV", number = 1000, classProbs = T))
+  
+IterativePCA <- rbind(IterativePCA, knnTune$results[which.max(knnTune$results$Accuracy),])} #Save Accuracy and Kappa scores in dataframe to assess optimal PCs
+stopCluster(cl)
+
+#plot Accuracy & Kappa scores to determine optimal number of PCs to include as predictors in model
+IterativePCA$PCs <- c(2:80)
+tmp <- IterativePCA[,c(1,3,4)]
+tmp$Group <- c("Kappa")
+knnPlot <- IterativePCA[,c(1,2,4)]
+knnPlot$Group <- c("Accuracy")
+colnames(knnPlot)[2] <- "Score"
+colnames(tmp)[2] <- "Score"
+knnPlot <- rbind(knnPlot, tmp)
+remove(tmp)
+
+ggplot(knnPlot, aes(x=PCs, y=Score, group = Group, color = Group)) + 
+  geom_line() +
+  geom_point()
+```
+
+```{r KNN - Tune Final Model}
+# adjust predictors to optimal number of PCs and tune final model
+set.seed(42)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+knnFit <- train(x = PCApredictors[,1:21], #1:x where x is optimal number of predictors
+                 y = PCApredictors$Genus,
+                 method = "knn",
+                 tuneGrid = data.frame(.k = c(11)), #initial tuning should be between 2:20
+                 trControl = trainControl(method = "LOOCV", number = 1000, classProbs = T))
+stopCluster(cl)
+
+#Plot Accuracy score over k to determine optimal value for k
+#plot(knnFit)
+
+#Summary of final model
+knnFit
+
+#Confusion matrix of final model 
+confusionMatrix(knnFit$pred$pred, knnFit$pred$obs)
+
+#clear environment
+keep(Data.train, curves, speclist.train, sure = T)
+```
+
+```{r Random Forest - Optimise No. Predictors}
+#run loop to save Accuracy & Kappa scores in stepwise addition of PCs as predictors 
+set.seed(42)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+
+for (i in 2:80) { #2:x where x is number of PCs in PCA
+   rfTune <- train(x = PCApredictors[,1:i],
+                   y = PCApredictors$Genus,
+                   method = "rf",
+                   metric = "Accuracy",
+                   tuneGrid = data.frame(.mtry = c(2:(i-1))), #tune mtry on 2:i-1 no. of predictors. i should not exceed total no. predictors in model
+                   trControl = trainControl(method = "LOOCV", number = 1000, classProbs = TRUE))
+    
+IterativePCA <- rbind(IterativePCA, rfTune$results[which.max(rfTune$results$Accuracy),])} #Save Accuracy and Kappa scores in dataframe to assess optimal PCs
+
+#plot Accuracy & Kappa scores to determine optimal number of PCs to include as predictors in model
+IterativePCA$PC <- c(2:80)
+tmp <- IterativePCA[,c(1,3,4)]
+tmp$Group <- c("Kappa")
+RFplot <- IterativePCA[,c(1,2,4)]
+RFplot$Group <- c("Accuracy")
+colnames(RFplot)[2] <- "Score"
+colnames(tmp)[2] <- "Score"
+RFplot <- rbind(RFplot, tmp)
+remove(tmp)
+
+ggplot(RFplot, aes(x=PC, y=Score, group = Group, color = Group)) + 
+  geom_line() +
+  geom_point()
+```
+
+```{r Random Forest - Tune Final Model}
+# adjust predictors to optimal number of PCs and tune final model
+set.seed(42)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+rfFit <- train(x = PCApredictors[,1:10], #1:x where x is optimal number of predictors
+                   y = PCApredictors$Genus,
+                   method = "rf",
+                   metric = "Accuracy",
+                   tuneGrid = data.frame(.mtry = 3), #tune mtry on 2:(i-1) where i is no. of predictors. i should not exceed total no. predictors in model
+                   trControl = trainControl(method = "LOOCV", number = 1000, classProbs = TRUE))
+    
+#Plot Accuracy score over mtry to determine optimal value for mtry
+#plot(rfFit)
+
+#Summary of final model
+rfFit
+
+#Confusion matrix of final model 
+confusionMatrix(rfFit$pred$pred, rfFit$pred$obs)
+
+#clear environment
+keep(Data.train, curves, speclist.train, sure = T)
+```
+
+```{r Support Vector Machine - Optimise No. Predictors}
+#run loop to save Accuracy & Kappa scores in stepwise addition of PCs as predictors 
+set.seed(42)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+for (i in 4:81) {
+svmTune <- train(x = PCApredictors[,2:7], #change to final parameter once #PCs optimised
+                     y = PCApredictors$Genus,
+                     method = "svmLinear",
+                     metric = "Accuracy",
+                     tuneGrid = data.frame(.C = c(0.0003268809)), 
+                     trControl = trainControl(method = "LOOCV", number = 1000, classProbs = TRUE))
+
+IterativePCA <- rbind(IterativePCA, svmTune$results[which.max(svmTune$results$Accuracy),])} #Save Accuracy and Kappa scores in dataframe to assess optimal PCs
+stopCluster(cl)
+
+#plot Accuracy & Kappa scores to determine optimal number of PCs to include as predictors in model
+IterativePCA$PC <- c(2:80)
+tmp <- IterativePCA[,c(1,3,4)]
+tmp$Group <- c("Kappa")
+svmplot <- IterativePCA[,c(1,2,4)]
+svmplot$Group <- c("Accuracy")
+colnames(svmplot)[2] <- "Score"
+colnames(tmp)[2] <- "Score"
+svmplot <- rbind(svmplot, tmp)
+remove(tmp)
+
+ggplot(svmplot, aes(x=PC, y=Score, group = Group, color = Group)) +
+ geom_line() +
+ geom_point()
+```
+
+```{r Support Vector Machine - Tune Final Model}
+# adjust predictors to optimal number of PCs and tune final model
+SVMgrid <- c(2^seq(-20, 20, length = 20))
+set.seed(42)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+svmFit <- train(x = PCApredictors[,1:7], #1:x where x is optimal number of predictors
+                   y = PCApredictors$Genus,
+                   method = "svmLinear",
+                   metric = "Accuracy",
+                   tuneGrid = data.frame(.C = 0.000327), #Tune model on SVMgrid, then adjust to final Cost (C) parameter
+                   trControl = trainControl(method = "LOOCV", number = 1000, classProbs = TRUE))
+stopCluster(cl)
+
+#Plot Accuracy score over C to determine optimal value for C
+#plot(svmFit, scales = list(x = list(log = 2)))
+
+#Summary of final model
+svmFit
+
+#Confusion matrix of final model 
+confusionMatrix(svmFit$pred$pred, svmFit$pred$obs)
+
+#clear environment
+keep(Data.train, curves, speclist.train, sure = T)
+```
+
