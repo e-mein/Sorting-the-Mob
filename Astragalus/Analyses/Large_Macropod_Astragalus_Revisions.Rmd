@@ -637,7 +637,7 @@ Mean.Wallabia.Warp <- warpRefMesh(mesh = Wallabia.Mean, mesh.coord= GPA$coords[,
 remove(Wallabia.Mean, Mean.Wallabia.Warp, Wallabia.Mean.coord)
 ```
 
-##Classification New 
+##Classification New (Manual LOOCV loops) 
 ```{r Clean Environment}
 library(gdata)
 keep(Data.train, speclist.train, curves, sure = T)

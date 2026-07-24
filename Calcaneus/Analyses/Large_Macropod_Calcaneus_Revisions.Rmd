@@ -794,7 +794,7 @@ confusionMatrix(ldaFIT$pred$pred, ldaFIT$pred$obs)
 keep(curves, Data.train, speclist.train, sure = T)
 ```
 
-#Classification New New
+#Classification New (Manual LOOCV loops)
 ```{r Clean Environment}
 library(gdata)
 keep(Data.train, speclist.train, curves, sure = T)
