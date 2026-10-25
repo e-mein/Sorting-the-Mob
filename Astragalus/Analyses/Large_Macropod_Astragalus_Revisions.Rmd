@@ -8,44 +8,45 @@ editor_options:
 ---
 
 ````{r Load required packages & set working directory}
+
+install.packages(c("geomorph", "rgl", "Morpho", "plyr", "tidyverse", "caret","nlme", "doParallel", "gdata", "ggbeeswarm"))
+
 library(geomorph)
 library(rgl)
 library(Morpho)
 library(plyr)
 library(tidyverse)
-#library(pca3d)
 library(caret)
 library(nlme)
 library(doParallel)
-#library(landvR)
-
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_Morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus")
+library(gdata)
+library(ggbeeswarm)
 ````
 
 ##Import training data
 
 ````{r read in file list of coordinates, create object of list of coordinate files}
 #open specifier file
-speclist.train <- read.csv("Data/Specifier.csv")
+speclist.train <- read.csv("Astragalus/Data/Specifier.csv")
 rownames(speclist.train) <- c(paste(substr(speclist.train$Genus,1,1),substr(speclist.train$Species,1,3), speclist.train$Specimen_ID ,sep = "_"))
 
 #Create vector of coordinate files
-filelist.train <-list.files(path = "Data/Coordinates", pattern = ".txt")
+filelist.train <-list.files(path = "Astragalus/Data/Coordinates", pattern = ".txt")
 
 #Create vector of abbreviated specimen names
 filelist_species <- rownames(speclist.train)
 
 #Create array of landmark coordinate data
-coords <- NULL  
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus/Data/Coordinates")
-for (i in 1:length(filelist.train)){
-  temp  <- read.morphologika(filelist.train[i]) 
+coords <- NULL
+for (i in seq_along(filelist.train)) {
+  temp <- read.morphologika(
+    file.path("Astragalus", "Data", "Coordinates", filelist.train[i])
+  ) 
   k <- dim(temp)[1] 
   coords <- rbind(coords, two.d.array(temp))}
 Data.train <- arrayspecs(coords, k, 3) 
 dimnames(Data.train)[[3]] <- filelist_species
 
-setwd("C:/Users/erinm/Dropbox/Documents/PhD/Geometric_morphometrics/POSTCRANIA/Sorting-the-Mob/Astragalus")
 remove(i, filelist.train, k, coords, temp, filelist_species) 
 ````
 
@@ -64,21 +65,21 @@ remove(before, slide, after)
 
 ##Checks & Balances
 ```{r Read a mesh file in as a standard file to view against}
-# Oruf <- read.ply("Data/O_ruf_SAM-M27398.ply")
-# Oruf$material$color <- Oruf$it
-# Oruf$material$color <- "hotpink"
-# rgl.close()
-# shade3d(Oruf)
+Oruf <- read.ply("Astragalus/Data/O_ruf_SAM-M27398.ply")
+Oruf$material$color <- Oruf$it
+Oruf$material$color <- "hotpink"
+rgl.close()
+shade3d(Oruf)
 ```
 
 ```{r check what order ply specimen in is data array}
-#dimnames(Data.train)[[3]] 
+dimnames(Data.train)[[3]]
 ```
 
 ```{r Double check that the 3D info is entered properly by checking landmark numbers against ply}
-# plot3d(Data.train[,,71], asp=FALSE, size =5, col="green") #Data.train[,,x] where x is order of ply in array
-# text3d(Data.train[,,71], texts=c(1:dim (Data.train[,,71])[[1]])) #Data.train[,,x] where x is order of ply in array
-# shade3d(Oruf, alpha=0.7)
+plot3d(Data.train[,,71], asp=FALSE, size =5, col="green") #Data.train[,,x] where x is order of ply in array
+text3d(Data.train[,,71], texts=c(1:dim (Data.train[,,71])[[1]])) #Data.train[,,x] where x is order of ply in array
+shade3d(Oruf, alpha=0.7)
 ```
 
 ````{r check order of array}
@@ -307,7 +308,7 @@ MeanCoords <- mshape(GPA$coords)
 
 #find closest specimen to the mean shape & read ply
 findMeanSpec(GPA$coords) 
-MeanMesh <- read.ply("Data/O_ruf_SAM-M27398.ply") 
+MeanMesh <- read.ply("Astragalus/Data/O_ruf_SAM-M27398.ply") 
 
 #save average specimen coordinates
 mean_spec_coord <- Data.train[,,which(dimnames(Data.train)[[3]]=="O_ruf_SAM-M27398")]
@@ -564,7 +565,7 @@ shade3d(SmallWall, alpha = 0.6)
 ```{r Mean Macropus}
 #Read in ply of specimen closest to mean Macropus shape
 findMeanSpec(GPA$coords[,,GPA$genus == "Macropus"]) #find specimen
-Macropus.Mean <- read.ply("Data/M_gig_QM-JM20891.ply") #read ply
+Macropus.Mean <- read.ply("Astragalus/Data/M_gig_QM-JM20891.ply") #read ply
 GPA$ID[15] #double check array position matches ply for mesh.coord
 
 #calculate mean Macropus shape
@@ -583,7 +584,7 @@ remove(Macropus_Mean, Macropus_Mean_coord, Mean.Macropus.Warp)
 ```{r Mean Osphranter}
 #Read in ply of specimen closest to mean Osphranter shape
 findMeanSpec(GPA$coords[,,GPA$genus == "Osphranter"]) #find specimen
-Osphranter.Mean <- read.ply("Data/O_ruf_SAM-M27398.ply") #read ply
+Osphranter.Mean <- read.ply("Astragalus/Data/O_ruf_SAM-M27398.ply") #read ply
 GPA$ID[71] #double check array position matches ply for mesh.coord
 
 #calculate mean Osphranter shape
@@ -602,7 +603,7 @@ remove(Osphranter.Mean, Osphranter.Mean.coord, Mean.Osphranter.Warp)
 ```{r Mean Notamacropus}
 #Read in ply of specimen closest to mean Notamacropus shape
 findMeanSpec(GPA$coords[,,GPA$genus == "Notamacropus"]) #find specimen
-Notamacropus.Mean <- read.ply("Data/N_agi_MAGNT-U0237.ply") #read ply
+Notamacropus.Mean <- read.ply("Astragalus/Data/N_agi_MAGNT-U0237.ply") #read ply
 GPA$ID[20] #double check array position matches ply for mesh.coord
 
 #calculate mean Notamacropus shape
@@ -621,7 +622,7 @@ remove(Notamacropus.Mean, Notamacropus.Mean.coord, Mean.Notamacropus.Warp)
 ```{r Mean Wallabia}
 #Read in ply of specimen closest to mean Wallabia shape
 findMeanSpec(GPA$coords[,,GPA$genus == "Wallabia"]) #find specimen
-Wallabia.Mean <- read.ply("Data/W_bic_UQ98.ply") #read ply
+Wallabia.Mean <- read.ply("Astragalus/Data/W_bic_UQ98.ply") #read ply
 GPA$ID[81] #double check array position matches ply for mesh.coord
 
 #calculate mean Wallabia shape
